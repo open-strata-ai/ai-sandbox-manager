@@ -4,7 +4,7 @@
 > **Language · Framework**: Go · Gin + Cobra + Wire (DDD four layers; sandbox pool/scheduling hot path can be on Hertz/go-zero)
 > **Domain**: agent-infra (Agent infrastructure layer · sandbox execution environment)
 > **optional**: true (optional · optional, off by default; only required by Agents that allow code execution)
-> **Platform version**: v1.4.0
+> **Platform version**: v1.0.0
 > **Document Status**: Draft
 > **Responsible Person**: OpenStrata Architecture Group
 > **Associated links**: This repository [arch/ARCH.md](../../arch/ARCH.md) · [skills/SKILLS.md](../../skills/SKILLS.md) · [specs/SPECS.md](../../specs/SPECS.md); Architecture design document §4.3.3 (Sandbox execution environment) · §9.1 (Sandbox Node Group) · §10.3 (Sandbox SPI) · §10.4 (SPI Multiple Implementation) · §10.6 (Component Registry/Tool→SandboxExecutor) · §15.5 (DDD Layering) · §16 (BOM)

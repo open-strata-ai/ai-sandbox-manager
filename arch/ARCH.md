@@ -4,7 +4,7 @@
 > **Language · Framework**: Go · Gin + Cobra + Wire (DDD four layers; sandbox pool/scheduling hot path can be on Hertz/go-zero)
 > **Domain**: agent-infra (Agent infrastructure layer · sandbox execution environment)
 > **optional**: true (optional · optional, off by default; only required by Agents that allow code execution)
-> **Platform version**: v1.4.0
+> **Platform version**: v1.0.0
 
 ---
 
