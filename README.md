@@ -11,20 +11,76 @@
 
 ```
 ai-sandbox-manager/
-├── src/ or cmd/            #Application code (according to §15.5.2 DDD four layers)
-├── infrastructure/config/  #★ This repository SPI adapter local configuration fragment
-├── Dockerfile / helm/      #Deployment artifacts
-├── .github/                #Independent CI for each repository (build/test/scan/publish)
-└── docs/                   #★ Architecture / design / skills / specs (ARCH.md, DESIGN.md, SKILLS.md, SPECS.md, adr/)
+├── cmd/                     # Entrypoint + Bootstrap wiring (offline stand-in for Wire)
+├── domain/                  #③ Domain layer (pure logic, zero external deps)
+│   ├── model.go             #   SandboxSpec / ExecRequest / ExecResult / SandboxHandle / ResourceUsage / NetworkPolicy
+│   ├── ports.go             #   Sandbox / ProviderSelector / SandboxPool / AuditStore interfaces
+│   ├── errors.go            #   SandboxError + codes + HTTP mapping
+│   └── service.go           #   DefaultSelector (RULE-SB-005) / PoolKey / SpecHash
+├── application/             #② Application layer (orchestration)
+│   └── sandbox/             #   Manager: acquire → execute → release → stats (R1/R5/R6/R7)
+├── infrastructure/          #④ Infrastructure layer (SPI adapters = ACL)
+│   ├── adapter/             #   LocalProcessAdapter (offline) + Kata/E2B constructors
+│   ├── pool/                #   BucketPool: warm reuse, capacity, TTL reaper (§3.4/§5.1)
+│   ├── auditmem/            #   in-memory AuditStore (prod: PostgreSQL)
+│   └── config/              #   Config loader + config.yaml fragment
+├── interfaces/http/         #① Access layer: net/http router (/v1/sandbox/...)
+├── infrastructure/config/   #★ This repository SPI adapter local configuration fragment
+├── Dockerfile / Makefile    #Deployment artifacts
+├── .github/                 #Independent CI for each repository (build/test/scan/publish)
+└── docs/                    #★ Architecture / design / skills / specs (ARCH.md, DESIGN.md, SKILLS.md, SPECS.md, adr/)
 ```
 
-## Responsibilities of this repository (TODO: completion)
+## Responsibilities of this repository
 
-Describe in 1-3 sentences: the role of this repository in the layered architecture, the **SPI ports** exposed/dependent, and the external open source components it relies on (default ✅/optional).
+`ai-sandbox-manager` is OpenStrata's **Sandbox Execution Environment Manager** (agent-infra
+domain, §4.3.3). It turns "code running in an isolated environment" into a declarative, quota-bound,
+timeout-able, poolable, auditable security capability, shielding the Kata Containers / E2B differences
+behind a unified `Sandbox` SPI (§10.3/§10.4).
 
-## Local development (TODO: completion)
+- **Promised capabilities (R1–R7):** lifecycle/pool management, isolation policy, Kata/E2B adapters,
+  quota/timeout, dependency-injection execution, audit/measurement.
+- **Domain ports (domain-defined, infra-implemented):** `Sandbox` (acquire/execute/release/health),
+  `ProviderSelector` (kata/e2b routing, RULE-SB-005), `SandboxPool` (idle pool), `AuditStore`
+  (append-only `sandbox_exec_audit`, SPECS §8.2 — no code body).
+- **SPI adapters (ACL):** `LocalProcessAdapter` is the offline executor; `KataAdapter` /
+  `E2BAdapter` attach the `kata` / `e2b` runtime labels (production targets K8s RuntimeClass /
+  Firecracker). `SelectProvider(spec, tenant)` routes GPU→kata, tenant pref, then default (§6.4).
+- **External components (default ✅ / optional):** Kata Containers / E2B ❌ (optional, off by default,
+  lit from advanced, §10.2); Redis ✅ (pool metadata), Keycloak ✅ (tenant), OTel ✅ (tracing) consumer
+  ports — offline defaults use in-memory pool + no-op/identity stand-ins.
 
-- Build/Test/Run commands
-- How to access meta repository `dependencies/` dependency graph and `profiles/` presets
+## Local development
+
+Stdlib-only (no third-party modules) so the whole module is offline-verifiable:
+
+```bash
+make build           # go build ./...
+make lint            # go vet ./...
+make test            # go test ./...   (18 tests across 5 packages)
+make run             # go run ./cmd    (listens on :8080)
+```
+
+The service defaults to an **offline** wiring: a `LocalProcessAdapter` per provider, an in-memory
+`BucketPool` + `auditmem` store, and a `DefaultSelector` — so it runs and is testable without
+Kubernetes/E2B/Redis/PostgreSQL. Point `CONFIG_PATH` at a JSON overlay (keys mirror
+`infrastructure/config/config.yaml`) to change mode/pool/backpressure. Production swaps in a
+PostgreSQL `AuditStore`, a Redis-backed pool, and real Kata/E2B bindings in `cmd/Bootstrap`.
+
+### Quickstart
+
+```bash
+curl -X POST localhost:8080/v1/sandbox/acquire -H 'content-type: application/json' \
+  -d '{"runtime":"kata","cpu":"1","memory":"512Mi","network":"deny-all","image":"python"}'
+# -> { "handle": { "id": "sb-xxxx", "runtime": "kata", "endpoint": "local://sb-xxxx", ... } }
+
+curl -X POST localhost:8080/v1/sandbox/<id>/exec -H 'content-type: application/json' \
+  -d '{"code":"print(6*7)","language":"python"}'
+# -> { "stdout": "42\n", "stderr": "", "exit_code": 0, "duration_ms": 12, "resource_usage": {...} }
+
+curl -X POST localhost:8080/v1/sandbox/<id>/release          # 204
+curl localhost:8080/v1/sandbox/pool/stats                    # pool utilization
+curl localhost:8080/healthz                                  # readiness
+```
 
 > Evolutionary AI coding: The `docs/ (ARCH.md, DESIGN.md, SKILLS.md, SPECS.md, adr/)` of this repository is the source of truth shared by AI assistants and contributors; new decisions are recorded as ADRs in `docs/adr/`.
