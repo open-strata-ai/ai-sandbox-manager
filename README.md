@@ -15,10 +15,7 @@ ai-sandbox-manager/
 ├── infrastructure/config/  #★ This repository SPI adapter local configuration fragment
 ├── Dockerfile / helm/      #Deployment artifacts
 ├── .github/                #Independent CI for each repository (build/test/scan/publish)
-├── arch/                   #★ Architectural positioning (the role/boundary of this repository in the layering)
-├── design/                 #★ Design rules + ADR (evolutionary AI coding guidelines)
-├── skills/                 #★ AI coding skills (for consumption by CodeBuddy/Cursor, etc.)
-└── specs/                  #★ Specifications and contracts (API/AgentSpec/SPI Schema)
+└── docs/                   #★ Architecture / design / skills / specs (ARCH.md, DESIGN.md, SKILLS.md, SPECS.md, adr/)
 ```
 
 ## Responsibilities of this repository (TODO: completion)
