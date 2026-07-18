@@ -39,6 +39,8 @@ func main() {
 // Bootstrap wires the default offline composition. Production swaps in a
 // PostgreSQL AuditStore, a Redis-backed pool, and real Kata/E2B bindings.
 func Bootstrap(cfg config.Config) *sandbox.Manager {
+	pgDSN := os.Getenv("DATABASE_URL")
+
 	base := os.TempDir()
 	adapters := map[string]domain.Sandbox{
 		"kata": adapter.NewKataAdapter(base),
@@ -48,5 +50,19 @@ func Bootstrap(cfg config.Config) *sandbox.Manager {
 		DefaultRuntime: cfg.Defaults.Runtime,
 		TenantPrefs:    map[string]string{},
 	}
-	return sandbox.NewManager(cfg, selector, adapters, auditmem.New())
+
+	var audit domain.AuditStore
+	if pgDSN != "" {
+		pgaud, err := auditmem.NewPostgres(pgDSN)
+		if err != nil {
+			log.Printf("WARN: falling back to in-memory audit (%v)", err)
+			audit = auditmem.New()
+		} else {
+			audit = pgaud
+		}
+	} else {
+		audit = auditmem.New()
+	}
+
+	return sandbox.NewManager(cfg, selector, adapters, audit)
 }
