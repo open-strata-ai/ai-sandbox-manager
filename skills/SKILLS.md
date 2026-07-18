@@ -1,70 +1,70 @@
 # ai-sandbox-manager · Skills & Rules
 
-> **技能规则层** — 关键算法、并发/性能模型、安全策略的可执行规则
-> **源文档**: design/DESIGN.md §5 / §9 / §12
-> **平台版本**: v1.4.0
+> **Skill Rules Layer** — executable rules for key algorithms, concurrency/performance models, and security policies
+> **Source document**: design/DESIGN.md §5 / §9 / §12
+> **Platform version**: v1.4.0
 
 ---
 
-## 算法规则（§5）
+## Algorithm rules (§5)
 
-### RULE-SB-001: 沙箱池生命周期
+### RULE-SB-001: Sandbox pool life cycle
 
-**触发**: `Acquire(spec)` 调用
+**Trigger**: `Acquire(spec)` call
 
-**约束**:
-1. 维护按 `SandboxSpec`（runtime/CPU/mem/image）分桶的空闲池
-2. `Acquire` 优先复用 warm 沙箱，无空闲则新建
-3. `Release` 归还 warm 沙箱并刷新 TTL
-4. TTL 到期或池上限触发销毁（tmpfs 清理）
-5. 执行超时/资源超限由看门狗强杀并回收
+**constraint**:
+1. Maintain an idle pool bucketed by `SandboxSpec` (runtime/CPU/mem/image)
+2. `Acquire` will reuse the warm sandbox first, and create a new one if it is not free.
+3. `Release` returns the warm sandbox and refreshes the TTL
+4. TTL expiration or pool limit triggers destruction (tmpfs cleanup)
+5. Execution timeout/resource overrun will be killed and recycled by the watchdog
 
-**示例**:
+**Example**:
 ```
 State:  pool["kata:1:512Mi:python"] = [h1, h2, h3]  // 3 warm
 Request: Acquire(CPU="1", Memory="512Mi", Runtime="kata", Image="python")
-Action:  从池取 h1（warm, ~1s），不新建
-        池减少: [h2, h3]
+Action:  Take from the pool h1（warm, ~1s），No new creation
+        Pool reduction: [h2, h3]
 Return:  SandboxHandle{ID: h1, Endpoint: "10.0.3.5:9090"}
 
 TTL Expire:
-State:  h3 闲置 300s（TTL=300s）
-Action:  从池移除 h3 → 销毁 Pod → tmpfs 清理
+State:  h3 idle 300s（TTL=300s）
+Action:  Remove from pool h3 → destroy Pod → tmpfs clean up
 ```
 
-### RULE-SB-002: 池容量管理
+### RULE-SB-002: Pool capacity management
 
-**触发**: `Acquire` 时池为空 / `Release` 时池接近上限
+**Trigger**: `Acquire` when the pool is empty / `Release` when the pool is close to the upper limit
 
-**约束**:
-- 池上限: `maxIdlePerSpec`（默认 4）
-- 池为空且 `当前活跃 < 节点资源上限` → 新建
-- 池为空且 `当前活跃 ≥ 节点资源上限` → 阻塞或返回 `429 Busy`
-- 归还时池已满 → 直接销毁（不缓存）
+**constraint**:
+- Pool limit: `maxIdlePerSpec` (default 4)
+- The pool is empty and `currently active <node resource limit` → New
+- The pool is empty and `currently active ≥ node resource limit` → blocks or returns `429 Busy`
+- The pool is full when returned → destroyed directly (without caching)
 
-**示例**:
+**Example**:
 ```
 Config:  maxIdlePerSpec=4
 State:   pool size=4, all busy (leased)
-Request: Acquire → 池无空闲
-Check:   节点 CPU/Mem 余量足够 → 新建第5个
-Action:  Kata Pod 冷启动（~5s）
+Request: Acquire → Pool is not free
+Check:   node CPU/Mem enough margin → Create a new chapter5indivual
+Action:  Kata Pod cold start（~5s）
 
-Config:  maxIdlePerSpec=4, 节点 CPU 已满
-Request: Acquire → 池无空闲, 节点不可新建
+Config:  maxIdlePerSpec=4, node CPU Full
+Request: Acquire → Pool is not free, Node cannot be created
 Action:  429 Too Many Requests "sandbox pool exhausted"
 ```
 
-### RULE-SB-003: 隔离策略
+### RULE-SB-003: Isolation Policy
 
-**触发**: 沙箱创建阶段
+**Trigger**: Sandbox creation phase
 
-**约束**:
-- **Kata（主力）**: VM 级隔离, K8s `RuntimeClass=kata`, 默认 `NetworkPolicy: deny-all + allow-same-ns`
-- **E2B（备选）**: Firecracker microVM, 经 SDK 调用, 无 GPU
-- 文件系统: 临时 `tmpfs`, 执行后清理; 无持久化（除非显式挂载 PVC, optional）
+**constraint**:
+- **Kata (main)**: VM level isolation, K8s `RuntimeClass=kata`, default `NetworkPolicy: deny-all + allow-same-ns`
+- **E2B (Alternative)**: Firecracker microVM, called via SDK, no GPU
+- Filesystem: temporary `tmpfs`, cleaned up after execution; no persistence (unless PVC is explicitly mounted, optional)
 
-**示例**:
+**Example**:
 ```
 SandboxSpec:
   Runtime: kata
@@ -79,40 +79,40 @@ Kata Pod:
 
 Execute Code:
   Code: "import os; os.system('curl http://evil.com')"
-  Result: Network deny-all → curl 超时/连接拒绝
-          沙箱不变（仅网络不可达）
+  Result: Network deny-all → curl time out/Connection recircuit breakerd
+          Sandbox unchanged（Only the network is unreachable）
 ```
 
-### RULE-SB-004: 网络策略
+### RULE-SB-004: Network Policy
 
-**触发**: 沙箱创建时配置 NetworkPolicy
+**Trigger**: NetworkPolicy is configured when the sandbox is created
 
-**约束**:
-- `deny-all`: 禁止所有出网/入网（默认）
-- `allow-same-ns`: 允许同命名空间内通信
-- `egress-allowlist`: 仅放行白名单域名
-- 防止数据外泄/滥用
+**constraint**:
+- `deny-all`: disable all outgoing/incoming networks (default)
+- `allow-same-ns`: Allow communication within the same namespace
+- `egress-allowlist`: only allow whitelist domain names
+- Prevent data leakage/abuse
 
-**示例**:
+**Example**:
 ```
 SandboxSpec:
   Network: egress-allowlist
   EgressList: ["pypi.org", "files.pythonhosted.org"]
 
-结果: pip install 可访问 pypi
-     任意其他域名（如 telegram.org）→ 连接超时
+result: pip install accessible pypi
+     Any other domain name（like telegram.org）→ Connection timeout
 ```
 
-### RULE-SB-005: ProviderSelector 路由
+### RULE-SB-005: ProviderSelector routing
 
-**触发**: 每次 `Acquire` 调用，决定使用 Kata 还是 E2B
+**Trigger**: Each time `Acquire` is called, decide whether to use Kata or E2B
 
-**约束**:
-1. `spec.GPU > 0` → 强制 Kata（E2B 不支持 GPU 直通）
-2. 租户偏好 `tenant.sandboxProvider` → 优先匹配
-3. 默认 `sandbox.defaults.runtime`（当前为 `kata`）
+**constraint**:
+1. `spec.GPU > 0` → force Kata (E2B does not support GPU passthrough)
+2. Tenant preference `tenant.sandboxProvider` → priority matching
+3. Default `sandbox.defaults.runtime` (currently `kata`)
 
-**示例**:
+**Example**:
 ```
 Case 1: spec.GPU=1 → Select → "kata" (E2B no GPU)
 Case 2: spec.GPU=0, tenant.pref=kata → Select → "kata"
@@ -122,37 +122,37 @@ Case 4: spec.GPU=0, tenant.pref=nil → Select → "kata" (defaults)
 
 ---
 
-## 并发与性能规则（§9）
+## Concurrency and Performance Rules (§9)
 
-### RULE-SB-006: 池模型并发
+### RULE-SB-006: Pool model concurrency
 
-**触发**: `Acquire`/`Release` 并发调用
+**Trigger**: `Acquire`/`Release` concurrent calls
 
-**约束**:
-- 每 `SandboxSpec` 桶一个 `chan SandboxHandle` 实现无锁取还
-- `Acquire`/`Release` 毫秒级
-- 并发安全: channel 天然 FIFO 无竞态
+**constraint**:
+- One `chan SandboxHandle` per `SandboxSpec` bucket to achieve lock-free retrieval
+- `Acquire`/`Release` millisecond level
+- Concurrency safety: channel natural FIFO, no race conditions
 
-**示例**:
+**Example**:
 ```
 Pool Structure:
   pools = map[string]chan SandboxHandle
   pools["kata:1:512Mi:python"] = make(chan SandboxHandle, maxIdlePerSpec)
 
-Acquire: h := <-pools[key]  (阻塞等待或立即返回)
-Release: pools[key] <- h     (非阻塞发送或丢弃)
+Acquire: h := <-pools[key]  (Block waiting or return immediately)
+Release: pools[key] <- h     (non-blocking send or drop)
 ```
 
-### RULE-SB-007: Goroutine 模型
+### RULE-SB-007: Goroutine model
 
-**触发**: 每次执行请求
+**Trigger**: Each time a request is executed
 
-**约束**:
-- 每个 `Execute` 一个 goroutine + context 超时
-- 看门狗 goroutine: 监控超时/资源，超时触发强杀
-- 禁止在主 goroutine 中等待沙箱执行完成（必须异步）
+**constraint**:
+- One goroutine + context timeout per `Execute`
+- Watchdog goroutine: monitor timeout/resources, timeout triggers forced kill
+- Disable waiting for sandbox execution to complete in the main goroutine (must be asynchronous)
 
-**示例**:
+**Example**:
 ```
 Execute goroutine:   ctx, cancel := context.WithTimeout(ctx, spec.TimeoutMs)
                      result, err := exec(ctx, handle, req)
@@ -165,85 +165,85 @@ Watchdog goroutine:  <-ctx.Done()
                      }
 ```
 
-### RULE-SB-008: 背压保护
+### RULE-SB-008: Back pressure protection
 
-**触发**: 并发沙箱数接近节点上限
+**Trigger**: The number of concurrent sandboxes approaches the node limit
 
-**约束**:
-- 并发沙箱数受 `maxIdlePerSpec` + 节点 GPU/CPU 上限约束
-- 超出时 `Acquire` 阻塞或返回 `429 Busy`
-- 保护节点不 OOM / 不影响其他 Pod
+**constraint**:
+- The number of concurrent sandboxes is subject to `maxIdlePerSpec` + the node GPU/CPU upper limit
+- `Acquire` blocks or returns `429 Busy` when exceeded
+- Protect nodes from OOM / not affecting other Pods
 
-**示例**:
+**Example**:
 ```
-Config:  maxIdlePerSpec=4, 节点 CPU=8, 已有6个活跃沙箱各占1 CPU
+Config:  maxIdlePerSpec=4, node CPU=8, Already6active sandboxes each1 CPU
 Request: Acquire(CPU="1")
-Check:   6+1=7 ≤ 8 → 可新建
-Action:  新建第7个沙箱
+Check:   6+1=7 ≤ 8 → Can create new
+Action:  Create a new chapter7sandbox
 
 Request: Acquire(CPU="2")
-Check:   6+2=8 ≤ 8 → 可（但不推荐边界）
-Action:  新建第8个沙箱
+Check:   6+2=8 ≤ 8 → Can（But borders are not recommended）
+Action:  Create a new chapter8sandbox
 
-Request: Acquire (任意)
-Check:   8=8 → 节点 CPU 满
+Request: Acquire (arbitrary)
+Check:   8=8 → node CPU Full
 Action:  429 Too Many Requests "node capacity exhausted"
 ```
 
-### RULE-SB-009: 无状态控制面
+### RULE-SB-009: Stateless control plane
 
-**触发**: 部署配置
+**Trigger**: Deploy configuration
 
-**约束**:
-- 管理面无状态可水平扩（池元数据存 Redis）
-- 沙箱实例随节点存在（不随管理面滚动）
-- 扩容管理面不丢失沙箱池状态
+**constraint**:
+- The management plane is stateless and can be expanded horizontally (pool metadata is stored in Redis)
+- The sandbox instance exists with the node (does not scroll with the management plane)
+- Expanding the management plane without losing the sandbox pool status
 
 ---
 
-## 安全规则（§12）
+## Safety Rules (§12)
 
-### RULE-SB-010: VM/microVM 级隔离
+### RULE-SB-010: VM/microVM level isolation
 
-**触发**: 沙箱创建
+**Trigger**: Sandbox creation
 
-**约束**:
-- **Kata**: VM 级隔离，每个沙箱独立轻量 VM（KVM）
-- **E2B**: Firecracker microVM，独立 VM
-- 禁止容器级隔离（`docker run`）—— 必须 VM 隔离
-- 宿主机不可被沙箱内代码访问
+**constraint**:
+- **Kata**: VM-level isolation, independent lightweight VM (KVM) per sandbox
+- **E2B**: Firecracker microVM, standalone VM
+- Disable container-level isolation (`docker run`) - VM isolation required
+- The host cannot be accessed by code within the sandbox
 
-### RULE-SB-011: 网络隔离
+### RULE-SB-011: Network Isolation
 
-**触发**: 沙箱创建时
+**Trigger**: When the sandbox is created
 
-**约束**:
-- 默认 `NetworkPolicy: deny-all`（禁止所有出网/入网）
-- 出网白名单仅在显式声明 `egress-allowlist` 时开放
-- 不允许 `allow-all` 网络策略
-- 内网通信仅限同命名空间（`allow-same-ns`）
+**constraint**:
+- Default `NetworkPolicy: deny-all` (forbid all outgoing/incoming networks)
+- The outbound whitelist is only open when `egress-allowlist` is explicitly declared
+- disallow `allow-all` network policy
+- Intranet communication is limited to the same namespace (`allow-same-ns`)
 
-### RULE-SB-012: 资源硬限制
+### RULE-SB-012: Resource hard limit
 
-**触发**: 沙箱 Pod 创建
+**Trigger**: Sandbox Pod creation
 
-**约束**:
-- CPU/Mem/GPU 经 K8s container `resources.limits` 约束
-- 超限由 cgroups 硬杀（OOMKill / CPU throttle）
-- GPU 经 device plugin 直通（仅 Kata）
-- 不允许 `limits=requests` 忽略（必须显式设置）
+**constraint**:
+- CPU/Mem/GPU are restricted by K8s container `resources.limits`
+- Hard killing by cgroups (OOMKill/CPU throttle) if the limit is exceeded
+- GPU passthrough via device plugin (Kata only)
+- Do not allow `limits=requests` to be ignored (must be set explicitly)
 
-### RULE-SB-013: 执行超时
+### RULE-SB-013: Execution timeout
 
-**触发**: 每次 `Execute` 调用
+**Trigger**: Every time `Execute` is called
 
-**约束**:
-- 默认超时 30s（`sandbox.defaults.timeoutMs: 30000`）
-- 超时后看门狗强制回收沙箱（`forceKill`）
-- 超时沙箱不归还池（直接销毁）
-- 超时记录审计 + 计量
+**constraint**:
+- Default timeout 30s (`sandbox.defaults.timeoutMs: 30000`)
+- Watchdog forcefully recycles the sandbox after timeout (`forceKill`)
+- The timeout sandbox does not return the pool (directly destroys it)
+- Timeout record auditing + metering
 
-**示例**:
+**Example**:
 ```
 Config:  timeoutMs=30000
 Code:    "while True: pass"  (infinite loop)
@@ -253,42 +253,42 @@ Action:  After 30s → watchdog detects timeout
          → audit + metric recorded
 ```
 
-### RULE-SB-014: 代码不持久化
+### RULE-SB-014: Code is not persistent
 
-**触发**: 每次执行完成/超时/异常
+**Trigger**: Every execution completion/timeout/exception
 
-**约束**:
-- 临时 `tmpfs`，执行后清理
-- 不长期存储用户代码（安全）
-- 可选: 执行产物（artifact）落地 MinIO 需显式开启且受租户隔离
-- 审计日志不记录代码体（只记录 metadata）
+**constraint**:
+- Temporary `tmpfs`, clean up after execution
+- No long-term storage of user code (security)
+- Optional: Execution artifact (artifact) implementation MinIO needs to be explicitly enabled and isolated by tenants
+- The audit log does not record the code body (only metadata is recorded)
 
-### RULE-SB-015: 全量审计
+### RULE-SB-015: Full audit
 
-**触发**: 每次执行完成（成功/失败/超时）
+**Trigger**: Each time execution is completed (success/failure/timeout)
 
-**约束**:
-- 审计写入 PostgreSQL `sandbox_exec_audit`
-- 字段: tenant_id, runtime, exit_code, duration_ms, resource_usage, created_at
-- 不记录代码体
-- 异步写入，不阻塞主路径
-
----
-
-## 可观测性规则
-
-- OTel traces + 审计默认开（core）
-- Prometheus 指标: 池利用率, Acquire/Execute QPS, 执行时长(p50/p95/p99), 超时率, 资源消耗
-- 高并发 Execute 下监控节点资源不 OOM / 不雪崩
+**constraint**:
+- Audit writes to PostgreSQL `sandbox_exec_audit`
+- Fields: tenant_id, runtime, exit_code, duration_ms, resource_usage, created_at
+- Do not record the code body
+- Asynchronous writing, does not block the main path
 
 ---
 
-## 追溯矩阵
+## Observability rules
 
-| 规则 | 源文档 DESIGN.md |
+- OTel traces + auditing is enabled by default (core)
+- Prometheus metrics: pool utilization, Acquire/Execute QPS, execution time (p50/p95/p99), timeout rate, resource consumption
+- No OOM / avalanche of monitoring node resources under high-concurrency Execute
+
+---
+
+## Traceability matrix
+
+| Rules | Source Document DESIGN.md |
 | --- | --- |
-| RULE-SB-001~005 | §5 关键算法 |
-| RULE-SB-006~009 | §9 并发与性能 |
-| RULE-SB-010~015 | §12 可观测性/安全 |
+| RULE-SB-001~005 | §5 Key Algorithm |
+| RULE-SB-006~009 | §9 Concurrency and Performance |
+| RULE-SB-010~015 | §12 Observability/Security |
 
-> **变更记录**: v0.1 | 2026-07-17 | 初稿（从 DESIGN.md §5/§9/§12 提取）
+> **Change Log**: v0.1 | 2026-07-17 | First draft (extracted from DESIGN.md §5/§9/§12)

@@ -1,29 +1,29 @@
 # ai-sandbox-manager · Specifications
 
-> **规格层** — API/CLI 接口面、数据模型、部署配置
-> **源文档**: design/DESIGN.md §7 / §8 / §11
-> **平台版本**: v1.4.0
+> **Specification layer** — API/CLI interface, data model, deployment configuration
+> **Source document**: design/DESIGN.md §7 / ​​§8 / §11
+> **Platform version**: v1.4.0
 
 ---
 
-## 7. API / CLI 接口面
+## 7. API / CLI interface
 
 ### 7.1 HTTP API
 
-| 方法 | 路径 | 说明 | 鉴权 |
+| Method | Path | Description | Authentication |
 | --- | --- | --- | --- |
-| POST | `/v1/sandbox/acquire` | 从池中获取沙箱 | Keycloak JWT |
-| POST | `/v1/sandbox/{id}/exec` | 在指定沙箱内执行代码 | Keycloak JWT |
-| POST | `/v1/sandbox/{id}/release` | 归还/销毁沙箱 | Keycloak JWT |
-| GET | `/v1/sandbox/pool/stats` | 查询池状态 | Keycloak JWT |
-| GET | `/healthz` | 存活/就绪探针 | 无 |
-| GET | `/metrics` | Prometheus 指标 | 内网 |
+| POST | `/v1/sandbox/acquire` | Acquire sandbox from pool | Keycloak JWT |
+| POST | `/v1/sandbox/{id}/exec` | Execute code in the specified sandbox | Keycloak JWT |
+| POST | `/v1/sandbox/{id}/release` | Return/destroy sandbox | Keycloak JWT |
+| GET | `/v1/sandbox/pool/stats` | Query pool status | Keycloak JWT |
+| GET | `/healthz` | Liveness/readiness probe | None |
+| GET | `/metrics` | Prometheus metrics | Intranet |
 
-### 7.2 API 请求/响应模型
+### 7.2 API request/response model
 
-#### Acquire 请求/响应
+#### Acquire request/response
 
-**请求体 (JSON)**:
+**Request body (JSON)**:
 ```json
 {
   "runtime": "kata",
@@ -37,7 +37,7 @@
 }
 ```
 
-**响应体 (JSON)**:
+**Response body (JSON)**:
 ```json
 {
   "handle": {
@@ -49,9 +49,9 @@
 }
 ```
 
-#### Execute 请求/响应
+#### Execute request/response
 
-**请求体 (JSON)**:
+**Request body (JSON)**:
 ```json
 {
   "code": "print(sum(range(100)))",
@@ -62,7 +62,7 @@
 }
 ```
 
-**响应体 (JSON)**:
+**Response body (JSON)**:
 ```json
 {
   "stdout": "4950\n",
@@ -77,7 +77,7 @@
 }
 ```
 
-#### Pool Stats 响应
+#### Pool Stats Response
 
 ```json
 {
@@ -100,25 +100,25 @@
 
 ### 7.3 CLI
 
-本仓不单独发布 CLI；`aictl` 可经控制面间接管理沙箱策略。运维用 `--config` 启动。
+This repository does not publish a separate CLI; `aictl` can indirectly manage sandbox policies through the control plane. Operation and maintenance is started with `--config`.
 
 ---
 
-## 8. 数据模型
+## 8. Data model
 
-### 8.1 持久化概述
+### 8.1 Persistence Overview
 
-本仓以**运行时状态**为主，轻持久化：
+This repository is mainly based on **runtime state**, with light persistence:
 
-| 存储 | 角色 | 数据内容 |
+| Storage | Role | Data Content |
 | --- | --- | --- |
-| Redis（core） | 运行时状态 | 池元数据（空闲/活跃句柄）、配额计数 |
-| PostgreSQL（core） | 审计 | `sandbox_exec_audit`（执行审计） |
-| MinIO（optional） | 产物存储 | 执行产物落地（需显式开启 + 租户隔离） |
+| Redis (core) | Runtime status | Pool metadata (idle/active handles), quota count |
+| PostgreSQL (core) | Audit | `sandbox_exec_audit` (execute audit) |
+| MinIO (optional) | Product storage | Execute product implementation (requires explicit enablement + tenant isolation) |
 
-> 不长期存储用户代码（安全）。
+> Do not store user code long-term (security).
 
-### 8.2 核心表: `sandbox_exec_audit`
+### 8.2 Core table: `sandbox_exec_audit`
 
 ```sql
 CREATE TABLE sandbox_exec_audit (
@@ -132,46 +132,46 @@ CREATE TABLE sandbox_exec_audit (
 );
 ```
 
-**列说明**:
+**Column Description**:
 
-| 列 | 类型 | 说明 |
+| Column | Type | Description |
 | --- | --- | --- |
-| id | BIGSERIAL | 自增主键 |
-| tenant_id | TEXT | 租户标识 |
-| runtime | TEXT | 使用的运行时: `kata` / `e2b` |
-| exit_code | INT | 进程退出码; -1 = 超时/被杀 |
-| duration_ms | INT | 执行时长（毫秒） |
+| id | BIGSERIAL | Auto-increment primary key |
+| tenant_id | TEXT | Tenant ID |
+| runtime | TEXT | Runtime used: `kata` / `e2b` |
+| exit_code | INT | Process exit code; -1 = timeout/killed |
+| duration_ms | INT | Execution duration (milliseconds) |
 | resource_usage | JSONB | `{cpu_ms, mem_bytes, gpu_ms}` |
-| created_at | TIMESTAMPTZ | 审计时间戳 |
+| created_at | TIMESTAMPTZ | Audit timestamp |
 
-> 注意: 此表不存储代码体（安全考量）。
+> Note: This table does not store the code body (security considerations).
 
-### 8.3 Redis 键设计
+### 8.3 Redis key design
 
-| Key Pattern | 用途 | TTL |
+| Key Pattern | Purpose | TTL |
 | --- | --- | --- |
-| `sandbox:pool:{spec_hash}` | 空闲沙箱句柄列表 | 无（Acquire/Release 维护） |
-| `sandbox:active:{handle_id}` | 活跃沙箱元数据 | 与租约一致 |
-| `sandbox:quota:{tenant}:count` | 租户并发沙箱计数 | 无（Release 时减） |
-| `sandbox:quota:{tenant}:cpu` | 租户 CPU 配额计数 | 无 |
+| `sandbox:pool:{spec_hash}` | List of free sandbox handles | None (Acquire/Release maintenance) |
+| `sandbox:active:{handle_id}` | Active sandbox metadata | Consistent with the lease |
+| `sandbox:quota:{tenant}:count` | Tenant concurrent sandbox count | None (decrease when Release) |
+| `sandbox:quota:{tenant}:cpu` | Tenant CPU quota count | None |
 
 ---
 
-## 11. 配置与部署
+## 11. Configuration and deployment
 
-### 11.1 部署形态
+### 11.1 Deployment form
 
-| 属性 | 值 |
+| Properties | Values ​​|
 | --- | --- |
-| 必选性 | optional（默认不部署） |
-| 启用阶段 | advanced 档起点亮 |
-| 命名空间 | `ai-system` 或租户命名空间 |
-| 部署方式 | K8s Deployment（advanced+） |
-| 沙箱节点 | 需要 `kata-containers` RuntimeClass（§9.1 沙箱节点组） |
+| Required | optional (not deployed by default) |
+| Activation stage | Advanced gear starts to light up |
+| namespace | `ai-system` or tenant namespace |
+| Deployment method | K8s Deployment (advanced+) |
+| Sandbox Nodes | Requires `kata-containers` RuntimeClass (§9.1 Sandbox Node Group) |
 
-### 11.2 K8s 资源配置
+### 11.2 K8s resource configuration
 
-**控制面（ai-sandbox-manager 自身）**:
+**Control surface (ai-sandbox-manager itself)**:
 ```yaml
 resources:
   requests:
@@ -182,9 +182,9 @@ resources:
     memory: 1Gi
 ```
 
-**沙箱 Pod**（资源由 `SandboxSpec` 动态决定）:
+**Sandbox Pod** (resources are dynamically determined by `SandboxSpec`):
 ```yaml
-# 示例: Python 代码执行沙箱
+# Example: Python code execution sandbox
 resources:
   requests:
     cpu: "1"
@@ -194,103 +194,103 @@ resources:
     memory: "512Mi"
 ```
 
-### 11.3 探针配置
+### 11.3 Probe configuration
 
-| 探针 | 路径 | 说明 | initialDelaySeconds | periodSeconds |
+| probe | path | description | initialDelaySeconds | periodSeconds |
 | --- | --- | --- | --- | --- |
-| 存活 | `GET /healthz` | 快速返回 200 | 5 | 10 |
-| 就绪 | `GET /healthz` | 校验 Redis + ≥1 provider healthy | 5 | 10 |
+| Alive | `GET /healthz` | Quick return 200 | 5 | 10 |
+| Ready | `GET /healthz` | Verify Redis + ≥1 provider healthy | 5 | 10 |
 
-### 11.4 滚动更新策略
+### 11.4 Rolling update strategy
 
 ```yaml
 strategy:
   type: RollingUpdate
 ```
 
-多副本管理面 + 探针。沙箱 Pod 不随管理面滚动。
+Multi-copy management plane + probe. Sandbox Pods do not scroll with the management plane.
 
-### 11.5 配置键完整列表
+### 11.5 Complete list of configuration keys
 
-**文件位置**: `infrastructure/config/`
+**File location**: `infrastructure/config/`
 
 ```yaml
 sandbox:
-  enabled: true                  # 组件总开关
+  enabled: true                  #Component master switch
 
   pool:
-    maxIdlePerSpec: 4            # 每种规格最大空闲数
-    ttlSeconds: 300              # 空闲回收 TTL
+    maxIdlePerSpec: 4            #Maximum idle number of each specification
+    ttlSeconds: 300              #Idle collection TTL
 
   defaults:
-    runtime: kata                # 主力运行时
+    runtime: kata                #Main operation time
     cpu: "1"
     memory: "512Mi"
-    network: deny-all            # 默认网络策略
-    timeoutMs: 30000             # 默认超时
+    network: deny-all            #Default network policy
+    timeoutMs: 30000             #Default timeout
 
   providers:
     kata:
-      enabled: true              # Kata 是否启用
-      runtimeClass: kata         # K8s RuntimeClass 名称
+      enabled: true              #Is Kata enabled?
+      runtimeClass: kata         #K8s RuntimeClass name
     e2b:
-      enabled: false             # E2B 默认关闭（optional 备选）
-      apiKeyFrom: vault://e2b    # E2B API Key 来源
+      enabled: false             #E2B is turned off by default (optional)
+      apiKeyFrom: vault://e2b # E2B API Key source
 ```
 
-**配置键说明**:
+**Configuration key description**:
 
-| 键 | 类型 | 默认值 | 说明 |
+| key | type | default value | description |
 | --- | --- | --- | --- |
-| `sandbox.enabled` | bool | `false` | 沙箱组件总开关 |
-| `sandbox.pool.maxIdlePerSpec` | int | `4` | 每种规格最大预创建空闲沙箱数 |
-| `sandbox.pool.ttlSeconds` | int | `300` | 空闲沙箱回收时间（秒） |
-| `sandbox.defaults.runtime` | string | `kata` | 默认运行时（`kata` 或 `e2b`） |
-| `sandbox.defaults.cpu` | string | `1` | 默认 CPU 核心数 |
-| `sandbox.defaults.memory` | string | `512Mi` | 默认内存 |
-| `sandbox.defaults.network` | string | `deny-all` | 默认网络策略 |
-| `sandbox.defaults.timeoutMs` | int | `30000` | 默认执行超时（毫秒） |
-| `sandbox.providers.kata.enabled` | bool | `true` | 启用 Kata 适配器 |
-| `sandbox.providers.kata.runtimeClass` | string | `kata` | Kata 的 K8s RuntimeClass 名称 |
-| `sandbox.providers.e2b.enabled` | bool | `false` | 启用 E2B 适配器 |
-| `sandbox.providers.e2b.apiKeyFrom` | string | `vault://e2b` | E2B API Key Vault 路径 |
+| `sandbox.enabled` | bool | `false` | Sandbox component master switch |
+| `sandbox.pool.maxIdlePerSpec` | int | `4` | Maximum number of pre-created idle sandboxes for each specification |
+| `sandbox.pool.ttlSeconds` | int | `300` | Idle sandbox recycling time (seconds) |
+| `sandbox.defaults.runtime` | string | `kata` | Default runtime (`kata` or `e2b`) |
+| `sandbox.defaults.cpu` | string | `1` | Default number of CPU cores |
+| `sandbox.defaults.memory` | string | `512Mi` | Default memory |
+| `sandbox.defaults.network` | string | `deny-all` | Default network policy |
+| `sandbox.defaults.timeoutMs` | int | `30000` | Default execution timeout (milliseconds) |
+| `sandbox.providers.kata.enabled` | bool | `true` | Enable Kata adapter |
+| `sandbox.providers.kata.runtimeClass` | string | `kata` | Kata’s K8s RuntimeClass name |
+| `sandbox.providers.e2b.enabled` | bool | `false` | Enable E2B adapter |
+| `sandbox.providers.e2b.apiKeyFrom` | string | `vault://e2b` | E2B API Key Vault path |
 
-### 11.6 阶段引入策略
+### 11.6 Stage introduction strategy
 
-| 阶段 | 组件 | 配置状态 |
+| Stages | Components | Configuration Status |
 | --- | --- | --- |
-| 一~三（starter/standard） | 全部 | `optional_disabled` — 不部署 |
-| 四（advanced） | Kata + E2B | `sandbox.enabled=true` + profiles 移除 `optional_disabled` |
-| 四（full） | 全部 + GPU | GPU 沙箱 + E2B 备选 |
+| One to Three (starter/standard) | All | `optional_disabled` — Do not deploy |
+| Four (advanced) | Kata + E2B | `sandbox.enabled=true` + profiles remove `optional_disabled` |
+| Four (full) | All + GPU | GPU Sandbox + E2B Alternative |
 
-### 11.7 启停控制
+### 11.7 Start and stop control
 
 ```yaml
-# PlatformManifest 级开关
+# PlatformManifest stage switch
 sandbox:
-  enabled: false  # 关闭后代码类 Tool 返回「沙箱不可用」
+  enabled: false  #After closing the code class Tool returns "Sandbox is not available"
 ```
 
-零停机启停：关闭后已租用沙箱可正常执行至释放，新请求返回 503。
+Start and stop with zero downtime: After closing, the rented sandbox can be executed normally until released, and new requests will return 503.
 
-### 11.8 依赖组件
+### 11.8 Dependent components
 
-| 组件 | 类型 | 必选 | 说明 |
+| Component | Type | Required | Description |
 | --- | --- | --- | --- |
-| Kata Containers | 运行时 | optional | VM 级隔离（沙箱节点组） |
-| E2B | 运行时 | optional | microVM（备选，云或自托管） |
-| Redis | 缓存 | core | 池元数据、配额计数 |
-| PostgreSQL | 存储 | core | 审计日志 |
-| Keycloak | 认证 | core | 租户身份 |
+| Kata Containers | Runtime | optional | VM-level isolation (sandbox node group) |
+| E2B | runtime | optional | microVM (alternative, cloud or self-hosted) |
+| Redis | cache | core | pool metadata, quota count |
+| PostgreSQL | storage | core | audit log |
+| Keycloak | authentication | core | tenant identity |
 
 ---
 
-## 追溯矩阵
+## Traceability matrix
 
-| 章节 | 源文档 DESIGN.md 对应 |
+| Chapter | Source document DESIGN.md corresponding |
 | --- | --- |
-| 7 API/CLI/配置接口面 | §7 |
-| 8 数据模型与存储 | §8 |
-| 11 配置与部署 | §11 |
+| 7 API/CLI/Configuration Interface | §7 |
+| 8 Data Model and Storage | §8 |
+| 11 Configuration and Deployment | §11 |
 
-> **变更记录**: v0.1 | 2026-07-17 | 初稿（从 DESIGN.md §7/§8/§11 提取）
+> **Change Record**: v0.1 | 2026-07-17 | First draft (extracted from DESIGN.md §7/§8/§11)
