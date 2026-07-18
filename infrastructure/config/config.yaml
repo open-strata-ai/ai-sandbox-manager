@@ -1,0 +1,25 @@
+# ai-sandbox-manager · SPI adapter local configuration fragment (SPECS §11.5)
+# Mirrors the JSON keys loaded by infrastructure/config/config.go.
+# NOTE: the stdlib loader reads an optional JSON overlay (CONFIG_PATH); this YAML
+# fragment is the documentation/source of truth for the configuration shape.
+sandbox:
+  enabled: true                  # component master switch (§11.7)
+
+  pool:
+    maxIdlePerSpec: 4            # max warm sandboxes pre-created per spec bucket
+    ttlSeconds: 300             # idle sandbox reclaim TTL
+
+  defaults:
+    runtime: kata                # main runtime
+    cpu: "1"
+    memory: "512Mi"
+    network: deny-all            # default network policy
+    timeoutMs: 30000             # default execution timeout
+
+  providers:
+    kata:
+      enabled: true              # Kata enabled (advanced stage)
+      runtimeClass: kata         # K8s RuntimeClass name
+    e2b:
+      enabled: false             # E2B off by default (optional alternative)
+      apiKeyFrom: vault://e2b    # E2B API Key vault path
