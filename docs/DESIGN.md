@@ -7,7 +7,7 @@
 > **Platform version**: v1.0.0
 > **Document Status**: Draft
 > **Responsible Person**: OpenStrata Architecture Group
-> **Associated links**: This repository [arch/ARCH.md](../../arch/ARCH.md) · [skills/SKILLS.md](../../skills/SKILLS.md) · [specs/SPECS.md](../../specs/SPECS.md); Architecture design document §4.3.3 (Sandbox execution environment) · §9.1 (Sandbox Node Group) · §10.3 (Sandbox SPI) · §10.4 (SPI Multiple Implementation) · §10.6 (Component Registry/Tool→SandboxExecutor) · §15.5 (DDD Layering) · §16 (BOM)
+> **Associated links**: This repository [docs/ARCH.md](../../docs/ARCH.md) · [docs/SKILLS.md](../../docs/SKILLS.md) · [docs/SPECS.md](../../docs/SPECS.md); Architecture design document §4.3.3 (Sandbox execution environment) · §9.1 (Sandbox Node Group) · §10.3 (Sandbox SPI) · §10.4 (SPI Multiple Implementation) · §10.6 (Component Registry/Tool→SandboxExecutor) · §15.5 (DDD Layering) · §16 (BOM)
 
 ---
 

@@ -1,6 +1,6 @@
 # ai-sandbox-manager · Architecture (Architecture Overview)
 
-> **Excerpted from** `design/DESIGN.md` §1 Positioning and Boundaries · §2 List of Responsibilities · §3 Core Interface · §6 Adapter
+> **Excerpted from** `docs/DESIGN.md` §1 Positioning and Boundaries · §2 List of Responsibilities · §3 Core Interface · §6 Adapter
 > **Language · Framework**: Go · Gin + Cobra + Wire (DDD four layers; sandbox pool/scheduling hot path can be on Hertz/go-zero)
 > **Domain**: agent-infra (Agent infrastructure layer · sandbox execution environment)
 > **optional**: true (optional · optional, off by default; only required by Agents that allow code execution)
@@ -315,5 +315,5 @@ SandboxPool Backstage:
 
 ---
 
-> **Associated documents**: This repository `design/DESIGN.md` · `skills/SKILLS.md` · `specs/SPECS.md`
+> **Associated documents**: This repository `docs/DESIGN.md` · `docs/SKILLS.md` · `docs/SPECS.md`
 > **Architecture Reference**: §4.3.3 (Sandbox Execution Environment) · §9.1 (Sandbox Node Group) · §10.3 (Sandbox SPI) · §10.4 (SPI Multiple Implementation) · §10.6 (Component Registry/Tool→SandboxExecutor) · §15.5 (DDD Layering) · §16 (BOM)

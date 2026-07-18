@@ -1,7 +1,7 @@
 # ai-sandbox-manager · Skills & Rules
 
 > **Skill Rules Layer** — executable rules for key algorithms, concurrency/performance models, and security policies
-> **Source document**: design/DESIGN.md §5 / §9 / §12
+> **Source document**: docs/DESIGN.md §5 / §9 / §12
 > **Platform version**: v1.0.0
 
 ---

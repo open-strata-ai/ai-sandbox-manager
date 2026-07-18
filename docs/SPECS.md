@@ -1,7 +1,7 @@
 # ai-sandbox-manager · Specifications
 
 > **Specification layer** — API/CLI interface, data model, deployment configuration
-> **Source document**: design/DESIGN.md §7 / ​​§8 / §11
+> **Source document**: docs/DESIGN.md §7 / ​​§8 / §11
 > **Platform version**: v1.0.0
 
 ---

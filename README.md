@@ -30,4 +30,4 @@ Describe in 1-3 sentences: the role of this repository in the layered architectu
 - Build/Test/Run commands
 - How to access meta repository `dependencies/` dependency graph and `profiles/` presets
 
-> Evolutionary AI coding: The `arch/design/skills/specs/` of this repository is the source of truth shared by AI assistants and contributors; new decisions are recorded as ADRs in `design/adr/`.
+> Evolutionary AI coding: The `docs/ (ARCH.md, DESIGN.md, SKILLS.md, SPECS.md, adr/)` of this repository is the source of truth shared by AI assistants and contributors; new decisions are recorded as ADRs in `docs/adr/`.
